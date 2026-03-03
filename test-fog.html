@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>雾视练习提升视力</title>
+<style>
+  body { font-family: sans-serif; background: #f0f0f0; margin:0; padding:0; overflow: hidden; }
+  .test-header { display:flex; justify-content: space-between; padding: 15px 20px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .test-title { font-size: 1.1em; font-weight: bold; }
+  .test-info { display:flex; gap: 15px; font-variant-numeric: tabular-nums; }
+  .test-main { display:flex; justify-content:center; align-items:center; height: calc(100vh - 60px); position: relative; }
+  
+  #e-chart-container { 
+    width: 200px; 
+    height: 200px; 
+    display:flex; 
+    justify-content:center; 
+    align-items:center; 
+    position: relative;
+  }
+
+  #e-chart-svg { width: 100%; height: 100%; }
+
+  /* 错误反馈样式 */
+  #error-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 150px;
+    color: rgba(255, 0, 0, 0.8);
+    display: none;
+    pointer-events: none;
+    z-index: 100;
+    font-weight: bold;
+    text-shadow: 0 0 10px white;
+  }
+
+  .timer-warning { color: red; font-weight: bold; }
+  .wait-hint { position: absolute; bottom: 20px; color: #666; font-size: 0.9em; display: none; }
+</style>
+</head>
+<body>
+
+<div id="page-test">
+  <header class="test-header">
+    <div id="test-title" class="test-title">准备中...</div>
+    <div class="test-info">
+      <div>计时: <span id="test-timer">--</span>s</div>
+      <div>得分: <span id="test-score">0/0</span></div>
+    </div>
+  </header>
+
+  <main class="test-main">
+    <div id="e-chart-container">
+      <div id="error-overlay">✕</div>
+      <svg id="e-chart-svg" viewBox="0 0 5 5">
+        <path d="M0,0 H5 V1 H1 V2 H5 V3 H1 V4 H5 V5 H0 Z" fill="currentColor"/>
+      </svg>
+    </div>
+    <div id="next-hint" class="wait-hint">请按任意键继续...</div>
+  </main>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const DIRECTIONS = ['up','down','left','right'];
+    const ROTATION_MAP = {up:-90, down:90, left:180, right:0};
+    const KEY_MAP = {ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right'};
+
+    let testConfig = null;
+    let timerInterval = null;
+    let fogIndex = 0;
+    let useFogNext = true;
+
+    let state = {
+        status: 'idle',
+        timer: 180,
+        correct: 0,
+        total: 0,
+        currentE: null,
+        waitingForConfirm: false
+    };
+
+    const eChart = document.getElementById('e-chart-svg');
+    const scoreEl = document.getElementById('test-score');
+    const timerEl = document.getElementById('test-timer');
+    const errorOverlay = document.getElementById('error-overlay');
+    const nextHint = document.getElementById('next-hint');
+
+    let audioCtx = null;
+    function initAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    function playErrorSound() {
+        initAudio();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth'; 
+        osc.frequency.setValueAtTime(120, audioCtx.currentTime); 
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+    }
+
+    function startTest(config) {
+        testConfig = config;
+        state.timer = config.duration || 180;
+        state.status = 'running';
+        document.getElementById('test-title').textContent = 
+             `雾视练习 (${state.timer === 60 ? '1分钟' : '3分钟'}) - ${config.minLevels[0].decimal}`;
+        state.currentE = generateRandomE(testConfig.fogLevels[0]);
+        
+        timerInterval = setInterval(() => {
+            if (state.status === 'running' && !state.waitingForConfirm) {
+                state.timer--;
+                timerEl.textContent = state.timer;
+                if(state.timer <= 10) timerEl.classList.add('timer-warning');
+                if(state.timer <= 0) finishTest();
+            }
+        }, 1000);
+        updateUI();
+    }
+
+    function handleInput(key) {
+        if (state.status !== 'running') return;
+
+        if (state.waitingForConfirm) {
+            proceedToNext();
+            return;
+        }
+
+        const dir = KEY_MAP[key];
+        if (!dir) return;
+
+        const isCorrect = (dir === state.currentE.direction);
+        
+        if (isCorrect) {
+            state.correct++;
+            state.total++;
+            proceedToNext();
+        } else {
+            state.total++;
+            showErrorState();
+        }
+    }
+
+    function showErrorState() {
+        state.waitingForConfirm = true;
+        errorOverlay.style.display = 'block';
+        nextHint.style.display = 'block';
+        playErrorSound();
+        updateUI(); 
+    }
+
+    function proceedToNext() {
+        state.waitingForConfirm = false;
+        errorOverlay.style.display = 'none';
+        nextHint.style.display = 'none';
+
+        let nextLevel;
+        if (useFogNext) {
+            fogIndex = (fogIndex + 1) % testConfig.fogLevels.length;
+            nextLevel = testConfig.fogLevels[fogIndex];
+        } else {
+            // 单个 minLevel，直接使用第一个
+            nextLevel = testConfig.minLevels[0];
+        }
+        useFogNext = !useFogNext;
+        state.currentE = generateRandomE(nextLevel);
+        updateUI();
+    }
+
+    function updateUI() {
+        scoreEl.textContent = `${state.correct}/${state.total}`;
+        eChart.style.width = state.currentE.level.sizePx + 'px';
+        eChart.style.height = state.currentE.level.sizePx + 'px';
+        eChart.style.transform = `rotate(${ROTATION_MAP[state.currentE.direction]}deg)`;
+    }
+
+    function generateRandomE(level) {
+        return { level, direction: DIRECTIONS[Math.floor(Math.random() * 4)] };
+    }
+
+    function finishTest() {
+        clearInterval(timerInterval);
+        state.status = 'finished';
+        saveRecord();
+        window.location.href = 'history.html';
+    }
+
+    function saveRecord() {
+        try {
+            let history = JSON.parse(localStorage.getItem('visionHistory') || '[]');
+            const now = new Date();
+            const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const formattedTime = now.toTimeString().split(' ')[0];
+
+            history.unshift({
+                date: formattedDate,
+                time: formattedTime,
+                testType: 'fog',
+                levelInfo: {
+                    fogLevels: testConfig.fogLevels.map(l => l.decimal),
+                    minLevels: testConfig.minLevels.map(l => l.decimal),
+                    mode: testConfig.duration === 60 ? '1分钟' : '3分钟'
+                },
+                score: `${state.correct}/${state.total}`,
+                accuracy: state.total > 0 ? (state.correct / state.total * 100).toFixed(1) + '%' : '0%'
+            });
+            localStorage.setItem('visionHistory', JSON.stringify(history));
+        } catch (e) { console.error(e); }
+    }
+
+    // 🔹 方向键专用监听，阻止浏览器默认行为
+    window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+            e.preventDefault();  // 阻止滚动和其他快捷键
+            initAudio();
+            handleInput(e.key);
+        }
+    });
+
+    const stored = localStorage.getItem('testConfig');
+    if (!stored) window.location.href = 'index.html';
+    else startTest(JSON.parse(stored));
+});
+</script>
+</body>
+</html>

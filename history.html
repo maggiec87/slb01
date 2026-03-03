@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视力测试历史</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; background: #f0f0f0; margin: 0; padding: 0; }
+  header { padding: 15px 20px; background: #007bff; color: white; text-align: center; font-size: 1.3em; font-weight: bold; }
+  #controls { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
+  #controls button { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; background-color: #007bff; color: white; }
+  table { width: 95%; margin: 0 auto 30px auto; border-collapse: collapse; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+  th, td { border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 0.95em; }
+  th { background-color: #007bff; color: white; }
+  td.type { color: #007bff; font-weight: bold; }
+  .mode-tag { font-size: 0.8em; padding: 2px 5px; border-radius: 3px; background: #eee; color: #666; margin-left: 5px; }
+  .mode-1min { background: #fff3cd; color: #856404; } 
+  .mode-3min { background: #d1ecf1; color: #0c5460; } 
+  td.score { color: #28a745; font-weight: bold; }
+</style>
+</head>
+
+<body>
+<header>历史记录</header>
+
+<div id="controls">
+  <button id="btn-export">导出</button>
+  <button id="btn-clear">清空</button>
+  <button id="btn-back">返回</button>
+</div>
+
+<table id="history-table">
+  <thead>
+    <tr>
+      <th>日期</th>
+      <th>时间</th>
+      <th>类型 (时长)</th>
+      <th>视标等级</th>
+      <th>得分</th>
+      <th>准确率</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const historyTableBody = document.querySelector('#history-table tbody');
+  const historyData = JSON.parse(localStorage.getItem('visionHistory') || '[]');
+
+  function renderTable() {
+    historyTableBody.innerHTML = '';
+    if(historyData.length === 0){
+      historyTableBody.innerHTML = '<tr><td colspan="6">暂无历史记录</td></tr>';
+      return;
+    }
+
+    historyData.forEach(item => {
+      const tr = document.createElement('tr');
+      
+      let levelText = '';
+      if(item.testType === 'fog' && item.levelInfo){
+        const min = item.levelInfo.minLevels.join('/');
+        levelText = `${min}`; 
+      } else {
+        levelText = item.level || '-';
+      }
+      // -------------------------
+
+      let modeHtml = '';
+      if(item.testType === 'fog' && item.levelInfo && item.levelInfo.mode){
+        const modeClass = item.levelInfo.mode === '1分钟' ? 'mode-1min' : 'mode-3min';
+        modeHtml = `<span class="mode-tag ${modeClass}">${item.levelInfo.mode}</span>`;
+      }
+
+      tr.innerHTML = `
+        <td>${item.date || ''}</td>
+        <td>${item.time || ''}</td>
+        <td class="type">${item.testType === 'fog' ? '雾视挑战' : '基准测试'}${modeHtml}</td>
+        <td style="font-size: 0.85em; color: #666;">${levelText}</td>
+        <td class="score">${item.score || '-'}</td>
+        <td class="accuracy">${item.accuracy || '-'}</td>
+      `;
+      historyTableBody.appendChild(tr);
+    });
+  }
+
+  renderTable();
+
+  // 导出 CSV 同步修改
+  document.getElementById('btn-export').onclick = () => {
+    if(historyData.length === 0) return;
+    let csvContent = '\uFEFF日期,时间,类型,时长模式,视标详情,得分,准确率\n';
+    
+    historyData.forEach(item => {
+      let levelText = '';
+      let mode = '标准';
+      
+      if(item.testType === 'fog' && item.levelInfo){
+        // CSV 导出也同步去掉雾视等级
+        levelText = `标:${item.levelInfo.minLevels.join('/')}`;
+        mode = item.levelInfo.mode || '3分钟';
+      } else {
+        levelText = item.level || '';
+      }
+
+      const typeStr = item.testType === 'fog' ? '雾视挑战' : '基准测试';
+      csvContent += `"${item.date}","${item.time}","${typeStr}","${mode}","${levelText}","${item.score}","${item.accuracy}"\n`;
+    });
+
+    const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    // 自动遵循 yyyy-mm-dd 格式
+    const today = new Date().toISOString().split('T')[0];
+    link.download = `vision_history_${today}.csv`;
+    link.click();
+  };
+
+  document.getElementById('btn-clear').onclick = () => {
+    if(confirm('确定要清空所有历史记录吗？')){
+      localStorage.removeItem('visionHistory');
+      location.reload();
+    }
+  };
+
+  document.getElementById('btn-back').onclick = () => {
+    window.location.href = 'index.html';
+  };
+});
+</script>
+</body>
+</html>

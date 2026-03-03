@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>雾视挑战 - 选择视标</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 保持与 baseline-setup 一致的风格 */
+        .level-btn.selected {
+            background-color: #007bff;
+            color: white;
+            border: 2px solid #0056b3;
+            transform: scale(1.05);
+        }
+
+        .mode-selection { 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #fff; 
+            border-radius: 8px; 
+            display: flex; 
+            justify-content: center; 
+            gap: 20px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .mode-selection label { 
+            font-size: 1em; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            color: #333;
+        }
+
+        .controls-container {
+            text-align: center;
+            margin-top: 20px;
+            padding-bottom: 20px;
+        }
+
+        .action-btn {
+            padding: 12px 40px;
+            font-size: 1.1em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .selection-tip {
+            margin-bottom: 10px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .continue-prompt { 
+            background:#fff3cd; 
+            border:1px solid #ffeeba; 
+            padding:15px; 
+            margin:10px auto; 
+            border-radius:8px; 
+            text-align:center; 
+            max-width:90%;
+            font-size: 0.9em;
+        }
+        
+        .prompt-buttons { margin-top: 10px; display: flex; justify-content: center; gap: 10px; }
+        .secondary-btn { padding: 5px 15px; border: 1px solid #ccc; background: #fff; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="page-setup" class="page setup-page">
+        <h2 id="setup-title">选择视标与时长 (雾视挑战)</h2>
+
+        <div id="continue-prompt" class="continue-prompt" style="display: none;">
+            <p>上次练习：<span id="last-decimal" style="font-weight: bold;"></span></p>
+            <div class="prompt-buttons">
+                <button id="btn-continue-last" class="secondary-btn" style="background: #007bff; color: white; border: none;">直接开始</button>
+                <button id="btn-new-selection" class="secondary-btn">重新选择</button>
+            </div>
+        </div>
+
+        <div class="mode-selection">
+            <label><input type="radio" name="duration" value="60"> 练习1分钟</label>
+            <label><input type="radio" name="duration" value="180" checked> 练习3分钟</label>
+        </div>
+
+        <div id="level-grid-container" class="level-grid"></div>
+
+        <div class="controls-container">
+            <p id="selection-status" class="selection-tip">请选择一个视标</p>
+            <button id="btn-start-test" class="action-btn" disabled>确认开始</button>
+        </div>
+        
+        <div class="back-btn-container">
+            <button onclick="window.location.href='index.html'" class="back-btn">返回</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const PIXELS_PER_MM_ASSUMED = 96 / 25.4;
+            const VISION_LEVELS = [
+                { logMAR: '4.0', decimal: 0.1, sizeMm: 72.72 }, { logMAR: '4.1', decimal: 0.12, sizeMm: 60.60 },
+                { logMAR: '4.2', decimal: 0.15, sizeMm: 48.48 }, { logMAR: '4.3', decimal: 0.2, sizeMm: 36.36 },
+                { logMAR: '4.4', decimal: 0.25, sizeMm: 29.09 }, { logMAR: '4.5', decimal: 0.3, sizeMm: 24.24 },
+                { logMAR: '4.6', decimal: 0.4, sizeMm: 18.18 }, { logMAR: '4.7', decimal: 0.5, sizeMm: 14.54 },
+                { logMAR: '4.8', decimal: 0.6, sizeMm: 12.12 }, { logMAR: '4.9', decimal: 0.8, sizeMm: 9.09 },
+                { logMAR: '5.0', decimal: 1.0, sizeMm: 7.27 }, { logMAR: '5.1', decimal: 1.2, sizeMm: 6.06 },
+                { logMAR: '5.2', decimal: 1.5, sizeMm: 4.85 }, { logMAR: '5.3', decimal: 2.0, sizeMm: 3.64 },
+            ].map(level => ({ ...level, sizePx: (level.sizeMm * PIXELS_PER_MM_ASSUMED) / 4 }));
+
+            const gridContainer = document.getElementById('level-grid-container');
+            const btnStartTest = document.getElementById('btn-start-test');
+            const statusTip = document.getElementById('selection-status');
+            let selectedLevel = null;
+
+            // 渲染网格
+            VISION_LEVELS.forEach(level => {
+                const btn = document.createElement('button');
+                btn.className = 'level-btn';
+                btn.innerHTML = `<span class="decimal">${level.decimal}</span><span class="logmar">(${level.logMAR})</span>`;
+                
+                btn.onclick = () => {
+                    // 取消其他已选
+                    gridContainer.querySelectorAll('.level-btn.selected').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    selectedLevel = level;
+
+                    // 更新状态提示
+                    if (!selectedLevel) {
+                        statusTip.textContent = "请选择一个视标";
+                        statusTip.style.color = "#666";
+                    } else {
+                        statusTip.textContent = `已选择: ${selectedLevel.decimal}`;
+                        statusTip.style.color = "#007bff";
+                    }
+
+                    btnStartTest.disabled = !selectedLevel;
+                };
+                gridContainer.appendChild(btn);
+            });
+
+            // 启动逻辑
+            btnStartTest.onclick = () => {
+                const duration = parseInt(document.querySelector('input[name="duration"]:checked').value);
+                localStorage.setItem('testConfig', JSON.stringify({
+                    type: 'fogging',
+                    minLevels: [selectedLevel],
+                    fogLevels: VISION_LEVELS.slice(0, 3), // 默认前三个为雾视视标
+                    duration: duration
+                }));
+                window.location.href = 'test-fog.html';
+            };
+
+            // 检查上次记录逻辑
+            const lastConfig = JSON.parse(localStorage.getItem('testConfig') || 'null');
+            if (lastConfig && lastConfig.minLevels && lastConfig.type === 'fogging') {
+                document.getElementById('continue-prompt').style.display = 'block';
+                document.getElementById('last-decimal').textContent = lastConfig.minLevels.map(l => l.decimal).join(' / ');
+                document.getElementById('btn-continue-last').onclick = () => window.location.href = 'test-fog.html';
+                document.getElementById('btn-new-selection').onclick = () => document.getElementById('continue-prompt').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

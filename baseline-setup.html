@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>基准视标</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 选中状态的样式 */
+        .level-btn.selected {
+            background-color: #007bff;
+            color: white;
+            border: 2px solid #0056b3;
+            transform: scale(1.05);
+        }
+        
+        .controls-container {
+            text-align: center;
+            margin-top: 25px;
+            padding-bottom: 30px;
+        }
+
+        .action-btn {
+            padding: 12px 40px;
+            font-size: 1.1em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .action-btn:not(:disabled):hover {
+            background-color: #0056b3;
+        }
+        
+        .selection-tip {
+            margin-bottom: 10px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div style="display: none;">
+        <object type="image/svg+xml" data="icons.svg"></object>
+    </div>
+
+    <div id="page-setup" class="page setup-page">
+        <h2 id="setup-title">选择基准视标</h2>
+        
+        <div id="level-grid-container" class="level-grid"></div>
+
+        <div class="controls-container">
+            <p id="selection-status" class="selection-tip">请选择一个视标进行测试</p>
+            <button id="btn-start-test" class="action-btn" disabled>确认开始</button>
+        </div>
+
+        <div class="back-btn-container">
+            <button onclick="window.location.href='index.html'" class="back-btn">返回</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const PIXELS_PER_MM_ASSUMED = 96 / 25.4;
+            const VISION_LEVELS = [
+              { logMAR: '4.0', decimal: 0.1, sizeMm: 72.72 }, { logMAR: '4.1', decimal: 0.12, sizeMm: 60.60 },
+              { logMAR: '4.2', decimal: 0.15, sizeMm: 48.48 }, { logMAR: '4.3', decimal: 0.2, sizeMm: 36.36 },
+              { logMAR: '4.4', decimal: 0.25, sizeMm: 29.09 }, { logMAR: '4.5', decimal: 0.3, sizeMm: 24.24 },
+              { logMAR: '4.6', decimal: 0.4, sizeMm: 18.18 }, { logMAR: '4.7', decimal: 0.5, sizeMm: 14.54 },
+              { logMAR: '4.8', decimal: 0.6, sizeMm: 12.12 }, { logMAR: '4.9', decimal: 0.8, sizeMm: 9.09 },
+              { logMAR: '5.0', decimal: 1.0, sizeMm: 7.27 }, { logMAR: '5.1', decimal: 1.2, sizeMm: 6.06 },
+              { logMAR: '5.2', decimal: 1.5, sizeMm: 4.85 }, { logMAR: '5.3', decimal: 2.0, sizeMm: 3.64 },
+            ].map(level => ({
+                ...level,
+                sizePx: (level.sizeMm * PIXELS_PER_MM_ASSUMED) / 4
+            }));
+
+            const gridContainer = document.getElementById('level-grid-container');
+            const btnStartTest = document.getElementById('btn-start-test');
+            const statusTip = document.getElementById('selection-status');
+            
+            let currentSelectedLevel = null;
+
+            // 动态生成按钮
+            VISION_LEVELS.forEach(level => {
+                const btn = document.createElement('button');
+                btn.className = 'level-btn';
+                btn.innerHTML = `<span class="decimal">${level.decimal}</span><span class="logmar">(${level.logMAR})</span>`;
+                
+                btn.onclick = () => {
+                    // 移除之前选中的样式
+                    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('selected'));
+                    
+                    // 标记当前选中
+                    btn.classList.add('selected');
+                    currentSelectedLevel = level;
+                    
+                    // 更新按钮和文字状态
+                    btnStartTest.disabled = false;
+                    statusTip.textContent = `当前选择：${level.decimal} (${level.logMAR})`;
+                    statusTip.style.color = "#007bff";
+                };
+                
+                gridContainer.appendChild(btn);
+            });
+
+            // 确认按钮点击事件
+            btnStartTest.onclick = () => {
+                if (currentSelectedLevel) {
+                    localStorage.setItem('testConfig', JSON.stringify({
+                        type: 'baseline',
+                        level: currentSelectedLevel
+                    }));
+                    window.location.href = 'test-base.html';
+                }
+            };
+        });
+    </script>
+</body>
+
+</html>
