@@ -22,7 +22,7 @@
 
   #e-chart-svg { width: 100%; height: 100%; }
 
-  /* 错误反馈样式 - 同雾视挑战 */
+  /* 错误反馈样式 */
   #error-overlay {
     position: absolute;
     top: 50%;
@@ -105,16 +105,19 @@ function playErrorSound() {
     osc.stop(audioCtx.currentTime + 0.2);
 }
 
+// 渲染 E 图标
 function renderE(sizePx, dir){
   eChart.style.width = sizePx + 'px';
   eChart.style.height = sizePx + 'px';
   eChart.style.transform = `rotate(${ROTATION_MAP[dir]}deg)`;
 }
 
+// 生成随机方向 E
 function generateRandomE(level){
   return { level, direction:DIRECTIONS[Math.floor(Math.random()*4)] };
 }
 
+// 启动测试
 function startTest(config){
   testConfig = config;
   state = {
@@ -128,6 +131,7 @@ function startTest(config){
   updateUI();
 }
 
+// 处理按键输入
 function handleInput(key) {
   if (state.status !== 'running') return;
 
@@ -145,15 +149,14 @@ function handleInput(key) {
   if (isCorrect) {
     state.correct++;
     state.total++;
-    // 正确则直接进入下一题判断
     checkProgress();
   } else {
     state.total++;
-    // 错误则进入停顿反馈状态
     showErrorState();
   }
 }
 
+// 显示错误状态
 function showErrorState() {
   state.waitingForConfirm = true;
   errorOverlay.style.display = 'block';
@@ -162,6 +165,7 @@ function showErrorState() {
   updateUI();
 }
 
+// 继续下一题
 function proceedToNext() {
   state.waitingForConfirm = false;
   errorOverlay.style.display = 'none';
@@ -169,8 +173,8 @@ function proceedToNext() {
   checkProgress();
 }
 
+// 检查是否完成 10 题
 function checkProgress() {
-  // 10 题结束
   if (state.total >= 10) {
     finishTest();
   } else {
@@ -179,22 +183,24 @@ function checkProgress() {
   }
 }
 
+// 更新 UI
 function updateUI(){
   scoreEl.textContent = `${state.correct}/${state.total}`;
   renderE(state.currentE.level.sizePx, state.currentE.direction);
 }
 
+// 测试结束
 function finishTest(){
   state.status='finished';
   saveRecord();
   window.location.href='history.html';
 }
 
+// 保存记录到 localStorage
 function saveRecord(){
   try {
     let history = JSON.parse(localStorage.getItem('visionHistory')||'[]');
     const now = new Date();
-    // 严格遵循 yyyy-mm-dd 格式
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const formattedTime = now.toTimeString().split(' ')[0];
 
@@ -203,7 +209,7 @@ function saveRecord(){
       time: formattedTime,
       testType: 'base',
       levelInfo: {
-        minLevels: [testConfig.level.decimal] // 保持与 fog 模式结构类似，方便历史页展示
+        minLevels: [testConfig.level.decimal]
       },
       level: testConfig.level.decimal,
       score: `${state.correct}/${state.total}`,
@@ -217,18 +223,23 @@ function saveRecord(){
   }
 }
 
+// 监听键盘事件，只限制方向键用于选择方向
 window.addEventListener('keydown',(e)=>{
-  if (e.repeat) return; // 屏蔽长按连发
-  initAudio(); // 交互后激活音频上下文
+  if(e.repeat) return; 
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+      e.preventDefault(); // 阻止浏览器默认滚动/焦点行为
+  }
+  initAudio(); 
   handleInput(e.key);
 });
 
+// 获取测试配置，如果没有配置跳回主页
 const stored = localStorage.getItem('testConfig');
 if(!stored){ 
   window.location.href='index.html'; 
-  return;
+} else {
+  startTest(JSON.parse(stored));
 }
-startTest(JSON.parse(stored));
 
 });
 </script>
